@@ -87,23 +87,35 @@ fi
 
 wait
 
-# Print all the error logs from tests
-for f in *-fail-*.log; do
-    echo "=========================================="
-    echo "Error output from $f"
-    echo "=========================================="
-
-    cat ${f} 2> /dev/null || true
-    # streaming the output takes some time on Travis, and it might truncate before the output is finished printing
-    sleep 1
-
-    echo
-done
-
-# Stupid grep. Why exactly it insists on exiting nonzero when it 
+# Stupid grep. Why exactly it insists on exiting nonzero when it
 # doesn't find the match with -c...
 failures=$(grep -c 'FAIL' master.log || true)
-
 echo "failures: $failures"
 
-exit $failures
+# Refresh master.log before starting to run failed tests again
+cat /dev/null > master.log
+
+for f in *-fail-*.log; do
+    if [ -f ${f} ]; then
+        FAILED_TEST=${f::-11}
+        echo "$FAILED_TEST failed, trying to re-run solo..."
+        run_and_log "1-parallel/$FAILED_TEST"
+    fi
+done
+
+for f in *-fail-*.log; do
+    if [ -f ${f} ]; then
+        echo "=========================================="
+        echo "Error output from $f"
+        echo "=========================================="
+        cat ${f}
+        echo
+        # We need this for Travis to not shut us down
+        sleep 2
+    fi
+done
+
+failures=$(grep -c 'FAIL' master.log || true)
+echo "failures: $failures"
+
+exit ${failures}
